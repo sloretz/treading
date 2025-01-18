@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "treading"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "kivy>=2.3.1",
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+  {name = "Shane Loretz", email = "shane.loretz@gmail.com"},
+]
+maintainers = [
+  {name = "Shane Loretz", email = "shane.loretz@gmail.com"},
+]
+
+[project.gui-scripts]
+treading = "treading.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/treading"]
