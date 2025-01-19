@@ -1,0 +1,67 @@
+#:kivy 2.3.1
+
+
+<Issue>:
+    canvas:
+        Color:
+            rgba: 0.6, 0.6, 0.6, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    orientation: "horizontal"
+    size_hint_y: None
+    size_y: 100
+    BoxLayout:
+        size_hint_x: 0.9
+        orientation: "vertical"
+        padding: 3
+        spacing: 3
+        Label:
+            text_size: self.size
+            font_size: 24
+            halign: 'left'
+            valign: 'top'
+            text: "Stuff is really broken"
+            size_hint_y: 0.6
+        Label:
+            text_size: self.size
+            halign: 'left'
+            valign: 'bottom'
+            font_size: 16
+            text: "@clalancette"
+            size_hint_y: 0.2
+            bold: True
+        Label:
+            halign: 'left'
+            valign: 'bottom'
+            text_size: self.size
+            font_size: 16
+            text: "org/repo#123"
+            size_hint_y: 0.2
+    Button:
+        size_hint: (None, None)
+        size: 100, 100
+        text: "nope"
+    
+
+
+<IssueList>:
+    orientation: "tb-lr"
+    padding: 3
+    spacing: 3
+
+    Issue:
+
+    Issue:
+
+    Issue:
+
+    Issue:
+
+    Issue:
+
+
+<foobar>:
+    BoxLayout:
+        size_x: root.width
+        
