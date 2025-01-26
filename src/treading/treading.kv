@@ -1,4 +1,11 @@
 #:kivy 2.3.1
+#:import Clipboard kivy.core.clipboard.Clipboard
+
+<FatChance>:
+    size_hint_y: None
+    size_y: 100
+    Label:
+        text: "No more issues"
 
 
 <Issue>:
@@ -41,24 +48,49 @@
     Button:
         size_hint: (None, None)
         size: 100, 100
-        text: "nope"
+        text: "dismiss"
     
+<LoginScreen>:
+    BoxLayout:
+        orientation: "vertical"
+        Label:
+            font_size: 24
+            text: "Login to Github by using this code"
+        RelativeLayout:
+            Button:
+                font_size: 32
+                text: root.user_code
+                on_release: Clipboard.copy(self.text);
+            Label:
+                pos_hint: {'top': 0.65, 'right': 1.4}
+                text: "Click to copy"
+        Label:
+            font_size: 24
+            text: "at this web page"
+        RelativeLayout:
+            Button:
+                font_size: 24
+                text: root.verification_uri
+                on_release: root.open_browser(self.text)
+            Label:
+                pos_hint: {'top': 0.65, 'right': 1.34}
+                text: "Click to open browser"
 
+<IssueScreen>:
+    StackLayout:
+        orientation: "tb-lr"
+        padding: 3
+        spacing: 3
 
-<IssueList>:
-    orientation: "tb-lr"
-    padding: 3
-    spacing: 3
+        Issue:
 
-    Issue:
+        Issue:
 
-    Issue:
+        Issue:
 
-    Issue:
+        FatChance:
 
-    Issue:
-
-    Issue:
+        Issue:
 
 
 <foobar>:
