@@ -12,28 +12,88 @@ from kivy.uix.stacklayout import StackLayout
 from kivy.uix.widget import Widget
 from kivy.uix.screenmanager import ScreenManager, Screen
 
-from github import Auth
-from github import Github
-from github import GithubIntegration
-
 import urllib
 import webbrowser
 import requests
 import threading
 import time
 
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
+
+from . import token_tools
+
 CLIENT_ID = 'Iv23lipDhNiLUggDOf1B'
-USER_ACCESS_TOKEN = None
-REFRESH_TOKEN = None
+USERNAME = None
+REPOS = None
+GQL_CLIENT = None
 
-class Token:
 
-    def __init__(self, value, expires_in):
-        self.expires_at = time.time() + expires_in
-        self.value = value
+def make_gql_client(access_token):
+    global GQL_CLIENT
+    transport = RequestsHTTPTransport(
+        url="https://api.github.com/graphql",
+        headers = {
+            "Authorization": f"bearer {access_token}",
+        },
+        verify=True,
+        retries=3,
+    )
+    GQL_CLIENT = Client(transport=transport, fetch_schema_from_transport=True)
 
-    def __str__(self):
-        return self.value
+
+def get_username():
+    global USERNAME
+    if USERNAME is not None:
+        return USERNAME
+    global GQL_CLIENT
+    query = gql(
+        """
+        query {
+            viewer {
+                login
+            }
+        }
+        """
+    )
+    result = GQL_CLIENT.execute(query)
+    USERNAME = result['viewer']['login']
+    return USERNAME
+
+
+def get_all_user_repos():
+
+    def _query(after=""):
+        global GQL_CLIENT
+        query = gql(
+            """
+            query($after: String!) {
+                viewer {
+                    repositories(after: $after, first: 100, visibility: PUBLIC, affiliations: [OWNER]) {
+                        nodes {
+                            nameWithOwner
+                        }
+                        pageInfo {
+                            endCursor
+                            hasNextPage
+                        }
+                    }
+                }
+            }
+            """
+        )
+        result = GQL_CLIENT.execute(query, variable_values={'after': after})
+        print(result)
+        return result
+
+    q = None
+    while q is None or q['viewer']['repositories']['pageInfo']['hasNextPage']:
+        if q is None:
+            q = _query("")
+        else:
+            q = _query(q['viewer']['repositories']['pageInfo']['endCursor'])
+        for r in q['viewer']['repositories']['nodes']:
+            yield r['nameWithOwner']
 
 
 class FatChance(BoxLayout):
@@ -48,13 +108,54 @@ class IssueScreen(Screen):
     pass
 
 
+class RepoPickerScreen(Screen):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def use_all_user_repos(self):
+        global REPOS
+        REPOS = [r for r in get_all_user_repos()]
+        print(REPOS)
+        self.switch_to_issues()
+
+    def switch_to_issues(self):
+        # Must only be called on main thread
+        self.manager.transition.direction = 'left'
+        self.manager.current = 'issues'
+
+
 class LoginScreen(Screen):
 
     def __init__(self, **kwargs):
-        # TODO check for cached token first
-        self.authenticated = False
-        self.get_device_flow_codes()
+        self.device_code = ""
+        self.user_code = ""
+        self.verification_uri = ""
         super().__init__(**kwargs)
+
+    def check_login(self):
+        if self.auth_with_cached_token():
+            self.switch_to_repos()
+        else:
+            self.get_device_flow_codes()
+
+    def auth_with_cached_token(self):
+        rt = token_tools.get_refresh_token()
+        if rt is None:
+            return False
+        data = {
+            'client_id': CLIENT_ID,
+            'grant_type': 'refresh_token',
+            'refresh_token': rt,
+        }
+        r = requests.post('https://github.com/login/oauth/access_token', data=data)
+        if r.status_code != 200:
+            return False
+        
+        response = urllib.parse.parse_qs(r.text)
+        token_tools.store_refresh_token(response['refresh_token'][0])
+        make_gql_client(response['access_token'][0])
+        return True
 
     def get_device_flow_codes(self):
         url = "https://github.com/login/device/code"
@@ -68,9 +169,6 @@ class LoginScreen(Screen):
         interval = int(response['interval'][0])
         expire_time = time.time() + int(response['expires_in'][0])
         Clock.schedule_once(lambda dt: self.check_auth(interval, expire_time), interval)
-
-    def on_login():
-        print("hello world")
 
     def open_browser(self, url):
         webbrowser.open(url)
@@ -99,15 +197,20 @@ class LoginScreen(Screen):
                 return
             raise RuntimeError(f'TODO Handle auth check error {response}')
         else:
-            USER_ACCESS_TOKEN = Token(response['access_token'][0], int(response['expires_in'][0]))
-            REFRESH_TOKEN = Token(response['refresh_token'][0], int(response['refresh_token_expires_in'][0]))
-            self.switch_to_issues()
+            token_tools.store_refresh_token(response['refresh_token'][0])
+            make_gql_client(response['access_token'][0])
+            self.switch_to_repos()
             return
 
-    def switch_to_issues(self):
-        # Must only be called on main thread
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'issues'
+    def switch_to_repos(self):
+        print("Switch to repos")
+
+        def _switch_any_thread(dt):
+            # Must only be called on main thread
+            self.manager.transition.direction = 'left'
+            self.manager.current = 'repos'
+
+        Clock.schedule_once(_switch_any_thread)
 
 
 class TreadingApp(App):
@@ -118,7 +221,9 @@ class TreadingApp(App):
 
         sm = ScreenManager()
         sm.add_widget(LoginScreen(name='login'))
+        sm.add_widget(RepoPickerScreen(name='repos'))
         sm.add_widget(IssueScreen(name='issues'))
+
         return sm
 
 

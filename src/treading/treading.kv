@@ -51,6 +51,7 @@
         text: "dismiss"
     
 <LoginScreen>:
+    on_enter: self.check_login()
     BoxLayout:
         orientation: "vertical"
         Label:
@@ -91,6 +92,21 @@
         FatChance:
 
         Issue:
+
+
+<RepoPickerScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        Label:
+            font_size: 24
+            text: "Pick repos to list issues from"
+        Button:
+            text: "My Public repos"
+            on_release: root.use_all_user_repos()
+        Button:
+            text: "Gazebo PMC repos"
+        Button:
+            text: "ROS PMC repos"
 
 
 <foobar>:
