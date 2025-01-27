@@ -6,6 +6,7 @@ from kivy.clock import Clock
 from kivy.config import Config
 Config.set('graphics', 'resizable', False)
 from kivy.core.window import Window
+from kivy.properties import NumericProperty
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.stacklayout import StackLayout
@@ -22,10 +23,12 @@ from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
 from . import token_tools
+from .issue_loader import IssueLoader
 
 CLIENT_ID = 'Iv23lipDhNiLUggDOf1B'
 USERNAME = None
 REPOS = None
+ISSUES = None
 GQL_CLIENT = None
 
 
@@ -93,7 +96,55 @@ def get_all_user_repos():
         else:
             q = _query(q['viewer']['repositories']['pageInfo']['endCursor'])
         for r in q['viewer']['repositories']['nodes']:
-            yield r['nameWithOwner']
+            yield r['nameWithOwner'].split('/')
+
+
+def get_newest_issues_and_prs(repos):
+    global GQL_CLIENT
+    repo_query = """
+    r%d: repository(owner: "%s", name: "%s") {
+        issues(first: 5, orderBy: {field: CREATED_AT, direction: ASC}, states: [OPEN]) {
+            nodes {
+                author {
+                    login
+                }
+                createdAt
+                number
+                title
+                updatedAt
+                url
+                viewerDidAuthor
+            }
+        }
+        pullRequests(first: 5, orderBy: {field: CREATED_AT, direction: ASC}, states: [OPEN]) {
+            nodes {
+                author {
+                    login
+                }
+                createdAt
+                updatedAt
+                number
+                title
+                url
+                viewerDidAuthor
+            }
+        }
+    }
+    """
+    repo_queries = []
+    for i, r in enumerate(repos[:25]):
+        repo_queries.append(repo_query % (i, r[0], r[1]))
+    query = gql(
+        f"""
+        query {{
+            {'\n'.join(repo_queries)}
+        }}
+        """
+    )
+
+    result = GQL_CLIENT.execute(query)
+    print(result)
+    return result
 
 
 class FatChance(BoxLayout):
@@ -110,14 +161,35 @@ class IssueScreen(Screen):
 
 class RepoPickerScreen(Screen):
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
     def use_all_user_repos(self):
         global REPOS
         REPOS = [r for r in get_all_user_repos()]
-        print(REPOS)
-        self.switch_to_issues()
+        self.switch_to_loading()
+
+    def switch_to_loading(self):
+        # Must only be called on main thread
+        self.manager.transition.direction = 'left'
+        self.manager.current = 'loading'
+
+
+class LoadingScreen(Screen):
+
+    progress = NumericProperty(0.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def update_progress(self, progress):
+        self.progress = progress * 100
+        if progress >= 1.0:
+            Clock.schedule_once(lambda dt: self._loader.cleanup())
+            Clock.schedule_once(lambda dt: self.switch_to_issues())
+
+    def on_enter(self):
+        global REPOS
+        global ISSUES
+        global GQL_CLIENT
+        self._loader = IssueLoader(GQL_CLIENT, REPOS, self.update_progress)
 
     def switch_to_issues(self):
         # Must only be called on main thread
@@ -222,6 +294,7 @@ class TreadingApp(App):
         sm = ScreenManager()
         sm.add_widget(LoginScreen(name='login'))
         sm.add_widget(RepoPickerScreen(name='repos'))
+        sm.add_widget(LoadingScreen(name='loading'))
         sm.add_widget(IssueScreen(name='issues'))
 
         return sm
