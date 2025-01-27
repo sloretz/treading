@@ -18,6 +18,7 @@ import webbrowser
 import requests
 import threading
 import time
+import pathlib
 
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
@@ -42,7 +43,8 @@ def make_gql_client(access_token):
         verify=True,
         retries=3,
     )
-    GQL_CLIENT = Client(transport=transport, fetch_schema_from_transport=True)
+    schema_path = pathlib.Path(__file__).parent / "schema.docs.graphql"
+    GQL_CLIENT = Client(transport=transport, schema=schema_path.read_text())
 
 
 def get_username():

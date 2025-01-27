@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "treading"
+name = "TreadI"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -24,7 +24,7 @@ maintainers = [
 ]
 
 [project.gui-scripts]
-treading = "treading.main:main"
+treadi = "treadi.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/treading"]
+packages = ["src/treadi"]
