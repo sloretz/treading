@@ -24,9 +24,9 @@ import pathlib
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
-from . import token_tools
 from . import auth
 from .issue_loader import IssueLoader
+from .repo_loader import CurrentUserRepoLoader
 
 
 USERNAME = None
@@ -45,39 +45,6 @@ def make_gql_client(access_token):
     )
     schema_path = pathlib.Path(__file__).parent.resolve() / "schema.docs.graphql"
     return Client(transport=transport, schema=schema_path.read_text())
-
-
-def get_all_user_repos(gql_client):
-
-    def _query(after=""):
-        query = gql(
-            """
-            query($after: String!) {
-                viewer {
-                    repositories(after: $after, first: 100, visibility: PUBLIC, affiliations: [OWNER]) {
-                        nodes {
-                            nameWithOwner
-                        }
-                        pageInfo {
-                            endCursor
-                            hasNextPage
-                        }
-                    }
-                }
-            }
-            """
-        )
-        result = gql_client.execute(query, variable_values={'after': after})
-        return result
-
-    q = None
-    while q is None or q['viewer']['repositories']['pageInfo']['hasNextPage']:
-        if q is None:
-            q = _query("")
-        else:
-            q = _query(q['viewer']['repositories']['pageInfo']['endCursor'])
-        for r in q['viewer']['repositories']['nodes']:
-            yield r['nameWithOwner'].split('/')
 
 
 def get_newest_issues_and_prs(client, repos):
@@ -141,21 +108,36 @@ class IssueScreen(Screen):
 class RepoPickerScreen(Screen):
 
     def use_all_user_repos(self):
-        global REPOS
-        REPOS = [r for r in get_all_user_repos(App.get_running_app().gql_client)]
-        self.switch_to_loading()
-
-    def switch_to_loading(self):
-        # Must only be called on main thread
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'loading'
+        self.manager.switch_to(RepoLoadingScreen(CurrentUserRepoLoader))
 
 
-class LoadingScreen(Screen):
+class RepoLoadingScreen(Screen):
+
+    def __init__(self, repo_loader_class, **kwargs):
+        self._loader = repo_loader_class(
+            App.get_running_app().gql_client,
+            self.switch_to_issue_loading
+        )
+        super().__init__(**kwargs)
+
+    def switch_to_issue_loading(self, repos):
+
+        def _switch(dt):
+            self.manager.switch_to(IssueLoadingScreen(repos))
+
+        Clock.schedule_once(lambda dt: self._loader.cleanup())
+        Clock.schedule_once(_switch)
+
+
+class IssueLoadingScreen(Screen):
 
     progress = NumericProperty(0.0)
 
-    def __init__(self, **kwargs):
+    def __init__(self, repos, **kwargs):
+        self._loader = IssueLoader(
+            App.get_running_app().gql_client,
+            repos,
+            self.update_progress)
         super().__init__(**kwargs)
 
     def update_progress(self, progress):
@@ -163,12 +145,6 @@ class LoadingScreen(Screen):
         if progress >= 1.0:
             Clock.schedule_once(lambda dt: self._loader.cleanup())
             Clock.schedule_once(lambda dt: self.switch_to_issues())
-
-    def on_enter(self):
-        global REPOS
-        global ISSUES
-        print(self.get_parent_window())
-        self._loader = IssueLoader(App.get_running_app().gql_client, REPOS, self.update_progress)
 
     def switch_to_issues(self):
         # Must only be called on main thread
@@ -194,13 +170,11 @@ class LoginScreen(Screen):
         self.start_device_flow()
 
     def start_device_flow(self):
-        print("Starting device flow")
         self.device_flow = auth.start_device_flow()
         print("Device flow started: ", self.device_flow)
         Clock.schedule_once(
             lambda dt: self.check_auth(),
             self.device_flow.interval)
-        print("foobar")
 
     def open_browser(self, url):
         webbrowser.open(url)
@@ -252,7 +226,6 @@ class TreadIApp(App):
             self.sm.add_widget(login_screen)
 
         self.sm.add_widget(RepoPickerScreen(name='repos'))
-        self.sm.add_widget(LoadingScreen(name='loading'))
         self.sm.add_widget(IssueScreen(name='issues'))
 
         return self.sm

@@ -76,7 +76,14 @@
                 pos_hint: {'top': 0.65, 'right': 1.34}
                 text: "Click to open browser"
 
-<LoadingScreen>:
+<RepoLoadingScreen>:
+    BoxLayout:
+        orientation: "vertical"
+        Label:
+            font_size: 24
+            text: "Loading repositories"
+
+<IssueLoadingScreen>:
     BoxLayout:
         orientation: "vertical"
         padding: 10
