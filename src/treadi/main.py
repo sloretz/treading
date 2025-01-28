@@ -7,6 +7,7 @@ from kivy.config import Config
 Config.set('graphics', 'resizable', False)
 from kivy.core.window import Window
 from kivy.properties import NumericProperty
+from kivy.properties import ObjectProperty
 
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.stacklayout import StackLayout
@@ -24,17 +25,16 @@ from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
 from . import token_tools
+from . import auth
 from .issue_loader import IssueLoader
 
-CLIENT_ID = 'Iv23lipDhNiLUggDOf1B'
+
 USERNAME = None
 REPOS = None
 ISSUES = None
-GQL_CLIENT = None
 
 
 def make_gql_client(access_token):
-    global GQL_CLIENT
     transport = RequestsHTTPTransport(
         url="https://api.github.com/graphql",
         headers = {
@@ -43,33 +43,13 @@ def make_gql_client(access_token):
         verify=True,
         retries=3,
     )
-    schema_path = pathlib.Path(__file__).parent / "schema.docs.graphql"
-    GQL_CLIENT = Client(transport=transport, schema=schema_path.read_text())
+    schema_path = pathlib.Path(__file__).parent.resolve() / "schema.docs.graphql"
+    return Client(transport=transport, schema=schema_path.read_text())
 
 
-def get_username():
-    global USERNAME
-    if USERNAME is not None:
-        return USERNAME
-    global GQL_CLIENT
-    query = gql(
-        """
-        query {
-            viewer {
-                login
-            }
-        }
-        """
-    )
-    result = GQL_CLIENT.execute(query)
-    USERNAME = result['viewer']['login']
-    return USERNAME
-
-
-def get_all_user_repos():
+def get_all_user_repos(gql_client):
 
     def _query(after=""):
-        global GQL_CLIENT
         query = gql(
             """
             query($after: String!) {
@@ -87,8 +67,7 @@ def get_all_user_repos():
             }
             """
         )
-        result = GQL_CLIENT.execute(query, variable_values={'after': after})
-        print(result)
+        result = gql_client.execute(query, variable_values={'after': after})
         return result
 
     q = None
@@ -101,8 +80,7 @@ def get_all_user_repos():
             yield r['nameWithOwner'].split('/')
 
 
-def get_newest_issues_and_prs(repos):
-    global GQL_CLIENT
+def get_newest_issues_and_prs(client, repos):
     repo_query = """
     r%d: repository(owner: "%s", name: "%s") {
         issues(first: 5, orderBy: {field: CREATED_AT, direction: ASC}, states: [OPEN]) {
@@ -144,8 +122,7 @@ def get_newest_issues_and_prs(repos):
         """
     )
 
-    result = GQL_CLIENT.execute(query)
-    print(result)
+    result = gql_client.execute(query)
     return result
 
 
@@ -165,7 +142,7 @@ class RepoPickerScreen(Screen):
 
     def use_all_user_repos(self):
         global REPOS
-        REPOS = [r for r in get_all_user_repos()]
+        REPOS = [r for r in get_all_user_repos(App.get_running_app().gql_client)]
         self.switch_to_loading()
 
     def switch_to_loading(self):
@@ -190,8 +167,8 @@ class LoadingScreen(Screen):
     def on_enter(self):
         global REPOS
         global ISSUES
-        global GQL_CLIENT
-        self._loader = IssueLoader(GQL_CLIENT, REPOS, self.update_progress)
+        print(self.get_parent_window())
+        self._loader = IssueLoader(App.get_running_app().gql_client, REPOS, self.update_progress)
 
     def switch_to_issues(self):
         # Must only be called on main thread
@@ -201,109 +178,88 @@ class LoadingScreen(Screen):
 
 class LoginScreen(Screen):
 
-    def __init__(self, **kwargs):
-        self.device_code = ""
-        self.user_code = ""
-        self.verification_uri = ""
-        super().__init__(**kwargs)
+    device_flow = ObjectProperty(
+            auth.DeviceFlow(
+            device_code="",
+            user_code="",
+            verification_uri="",
+            interval=0,
+            expires_in=0,
+        ),
+        rebind=True,
+    )
+    token_response = ObjectProperty()
 
-    def check_login(self):
-        if self.auth_with_cached_token():
-            self.switch_to_repos()
-        else:
-            self.get_device_flow_codes()
+    def on_enter(self):
+        self.start_device_flow()
 
-    def auth_with_cached_token(self):
-        rt = token_tools.get_refresh_token()
-        if rt is None:
-            return False
-        data = {
-            'client_id': CLIENT_ID,
-            'grant_type': 'refresh_token',
-            'refresh_token': rt,
-        }
-        r = requests.post('https://github.com/login/oauth/access_token', data=data)
-        if r.status_code != 200:
-            return False
-        
-        response = urllib.parse.parse_qs(r.text)
-        token_tools.store_refresh_token(response['refresh_token'][0])
-        make_gql_client(response['access_token'][0])
-        return True
-
-    def get_device_flow_codes(self):
-        url = "https://github.com/login/device/code"
-        r = requests.post(url, data={'client_id': CLIENT_ID})
-        if r.status_code != 200:
-            raise RuntimeError(f'TODO Handle device code request failure {r}')
-        response = urllib.parse.parse_qs(r.text)
-        self.device_code = response['device_code'][0]
-        self.user_code = response['user_code'][0]
-        self.verification_uri = response['verification_uri'][0]
-        interval = int(response['interval'][0])
-        expire_time = time.time() + int(response['expires_in'][0])
-        Clock.schedule_once(lambda dt: self.check_auth(interval, expire_time), interval)
+    def start_device_flow(self):
+        print("Starting device flow")
+        self.device_flow = auth.start_device_flow()
+        print("Device flow started: ", self.device_flow)
+        Clock.schedule_once(
+            lambda dt: self.check_auth(),
+            self.device_flow.interval)
+        print("foobar")
 
     def open_browser(self, url):
         webbrowser.open(url)
 
-    def check_auth(self, interval, expire_time):
-        if time.time() >= expire_time:
-            self.get_device_flow_codes()
-            return
-        data = {
-            'client_id': CLIENT_ID,
-            'device_code': self.device_code,
-            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-        }
-        r = requests.post('https://github.com/login/oauth/access_token', data=data)
-        if r.status_code != 200:
-            raise RuntimeError(f'TODO handle auth check failure {r}')
-        response = urllib.parse.parse_qs(r.text)
-        if 'error' in response.keys():
-            if 'slow_down' == response['error'][0]:
-                # Check again even later
-                Clock.schedule_once(lambda dt: self.check_auth(interval, expire_time), interval + 5)
-                return
-            if 'authorization_pending' == response['error'][0]:
-                # Check again later
-                Clock.schedule_once(lambda dt: self.check_auth(interval, expire_time), interval)
-                return
-            raise RuntimeError(f'TODO Handle auth check error {response}')
-        else:
-            token_tools.store_refresh_token(response['refresh_token'][0])
-            make_gql_client(response['access_token'][0])
-            self.switch_to_repos()
-            return
+    def check_auth(self):
+        response = auth.ask_for_token(self.device_flow)
+        match response.status:
+            case auth.Status.AUTHORIZATION_PENDING:
+                Clock.schedule_once(lambda dt: self.check_auth(), self.device_flow.interval)
+            case auth.Status.EXPIRED_TOKEN:
+                self.start_device_flow()
+            case auth.Status.ACCESS_DENIED:
+                raise RuntimeError('TODO nice error message when user denies TreadI App')
+            case auth.Status.ACCESS_GRANTED:
+                # Listeners on the token_response property are notified here
+                self.token_response = response
+            case _:
+                raise RuntimeError('TODO nice error message when other error encountered')
 
-    def switch_to_repos(self):
-        print("Switch to repos")
 
-        def _switch_any_thread(dt):
-            # Must only be called on main thread
+class TreadIApp(App):
+
+    gql_client = None
+    sm = None
+
+    def make_client_from_response(self, token_response):
+        if token_response.status == auth.Status.ACCESS_GRANTED:
+            self.gql_client = make_gql_client(token_response.access_token)
+            return True
+        return False
+
+    def on_login_result(self, _, token_response):
+        if self.make_client_from_response(token_response):
             self.manager.transition.direction = 'left'
             self.manager.current = 'repos'
-
-        Clock.schedule_once(_switch_any_thread)
-
-
-class TreadingApp(App):
+        raise RuntimeError('TODO more graceful response to login failure')
 
     def build(self):
         Window.size = (500, 518)
         Window.always_on_top = True
 
-        sm = ScreenManager()
-        sm.add_widget(LoginScreen(name='login'))
-        sm.add_widget(RepoPickerScreen(name='repos'))
-        sm.add_widget(LoadingScreen(name='loading'))
-        sm.add_widget(IssueScreen(name='issues'))
+        self.sm = ScreenManager()
 
-        return sm
+        token_response = auth.cycle_cached_token()
+        if not self.make_client_from_response(token_response):
+            # Ask user to login
+            login_screen = LoginScreen()
+            login_screen.bind(token_response=self.on_login_result)
+            self.sm.add_widget(login_screen)
+
+        self.sm.add_widget(RepoPickerScreen(name='repos'))
+        self.sm.add_widget(LoadingScreen(name='loading'))
+        self.sm.add_widget(IssueScreen(name='issues'))
+
+        return self.sm
 
 
 def main():
-    TreadingApp().run()
+    TreadIApp().run()
 
 
 if __name__ == '__main__':

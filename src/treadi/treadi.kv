@@ -51,7 +51,6 @@
         text: "dismiss"
     
 <LoginScreen>:
-    on_enter: self.check_login()
     BoxLayout:
         orientation: "vertical"
         Label:
@@ -60,7 +59,7 @@
         RelativeLayout:
             Button:
                 font_size: 32
-                text: root.user_code
+                text: root.device_flow.user_code
                 on_release: Clipboard.copy(self.text);
             Label:
                 pos_hint: {'top': 0.65, 'right': 1.4}
@@ -71,7 +70,7 @@
         RelativeLayout:
             Button:
                 font_size: 24
-                text: root.verification_uri
+                text: root.device_flow.verification_uri
                 on_release: root.open_browser(self.text)
             Label:
                 pos_hint: {'top': 0.65, 'right': 1.34}
