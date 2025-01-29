@@ -134,7 +134,7 @@ class IssueLoadingScreen(Screen):
     progress = NumericProperty(0.0)
 
     def __init__(self, repos, **kwargs):
-        self._loader = IssueLoader(
+        App.get_running_app().issue_loader = IssueLoader(
             App.get_running_app().gql_client,
             repos,
             self.update_progress)
@@ -143,7 +143,6 @@ class IssueLoadingScreen(Screen):
     def update_progress(self, progress):
         self.progress = progress * 100
         if progress >= 1.0:
-            Clock.schedule_once(lambda dt: self._loader.cleanup())
             Clock.schedule_once(lambda dt: self.switch_to_issues())
 
     def switch_to_issues(self):
@@ -198,6 +197,7 @@ class LoginScreen(Screen):
 class TreadIApp(App):
 
     gql_client = None
+    issue_loader = None
     sm = None
 
     def make_client_from_response(self, token_response):
