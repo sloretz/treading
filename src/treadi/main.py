@@ -1,14 +1,17 @@
 import kivy
 kivy.require('2.3.1')
 
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.config import Config
 Config.set('graphics', 'resizable', False)
 from kivy.core.window import Window
+from kivy.properties import ColorProperty
 from kivy.properties import NumericProperty
 from kivy.properties import ObjectProperty
 
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.stacklayout import StackLayout
 from kivy.uix.widget import Widget
@@ -25,7 +28,7 @@ from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
 from . import auth
-from .issue_loader import IssueLoader
+from .issue_loader import IssueLoader, Issue
 from .repo_loader import CurrentUserRepoLoader
 
 
@@ -47,62 +50,58 @@ def make_gql_client(access_token):
     return Client(transport=transport, schema=schema_path.read_text())
 
 
-def get_newest_issues_and_prs(client, repos):
-    repo_query = """
-    r%d: repository(owner: "%s", name: "%s") {
-        issues(first: 5, orderBy: {field: CREATED_AT, direction: ASC}, states: [OPEN]) {
-            nodes {
-                author {
-                    login
-                }
-                createdAt
-                number
-                title
-                updatedAt
-                url
-                viewerDidAuthor
-            }
-        }
-        pullRequests(first: 5, orderBy: {field: CREATED_AT, direction: ASC}, states: [OPEN]) {
-            nodes {
-                author {
-                    login
-                }
-                createdAt
-                updatedAt
-                number
-                title
-                url
-                viewerDidAuthor
-            }
-        }
-    }
-    """
-    repo_queries = []
-    for i, r in enumerate(repos[:25]):
-        repo_queries.append(repo_query % (i, r[0], r[1]))
-    query = gql(
-        f"""
-        query {{
-            {'\n'.join(repo_queries)}
-        }}
-        """
+class IssueWidget(ButtonBehavior, BoxLayout):
+
+    color = ColorProperty(
+        defaultvalue=[0.6, 0.6, 0.6, 1]
     )
 
-    result = gql_client.execute(query)
-    return result
+    issue = ObjectProperty(
+        Issue(),
+        rebind=True,
+    )
 
+    def __init__(self, issue, dismiss_callback, **kwargs):
+        self.issue = issue
+        self.dismiss_callback = dismiss_callback
+        super().__init__(**kwargs)
 
-class FatChance(BoxLayout):
-    pass
+    def on_press(self):
+        self.color = [0.6, 0.6, 0.8, 1]
 
+    def on_release(self):
+        # Oh yeah, the whole point is to open the issue
+        webbrowser.open(self.issue.url)
 
-class Issue(BoxLayout):
-    pass
+    def do_dismiss_callback(self):
+        # Only dismiss once
+        if self.dismiss_callback is not None:
+            d = self.dismiss_callback
+            self.dismiss_callback = None
+            d(self)
 
 
 class IssueScreen(Screen):
-    pass
+    
+    def on_pre_enter(self):
+        issue_loader = App.get_running_app().issue_loader
+        for i in range(5):
+            self.add_next_issue(issue_loader)
+
+    def add_next_issue(self, issue_loader):
+        issue = issue_loader.next_issue()
+        if issue is None:
+            return
+        # TODO give issue widget the issue
+        self.ids.stack.add_widget(IssueWidget(issue, self.dismiss))
+
+    def dismiss(self, issue_widget):
+        # Add a new issue below the others (probably displaying below the bottom of the screen)
+        self.add_next_issue(App.get_running_app().issue_loader)
+        # Animate the dismissed widget shrinking
+        anim = Animation(height = 0, opacity = 0, duration = 0.3, transition = 'out_cubic')
+        anim.bind(on_complete=lambda *args: self.ids.stack.remove_widget(issue_widget))
+        anim.start(issue_widget)
 
 
 class RepoPickerScreen(Screen):

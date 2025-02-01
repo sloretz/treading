@@ -1,20 +1,14 @@
 #:kivy 2.3.1
 #:import Clipboard kivy.core.clipboard.Clipboard
 
-<FatChance>:
-    size_hint_y: None
-    size_y: 100
-    Label:
-        text: "No more issues"
-
-
-<Issue>:
+<IssueWidget>:
     canvas:
         Color:
-            rgba: 0.6, 0.6, 0.6, 1
+            rgba: root.color
         Rectangle:
             pos: self.pos
             size: self.size
+
     orientation: "horizontal"
     size_hint_y: None
     size_y: 100
@@ -25,17 +19,19 @@
         spacing: 3
         Label:
             text_size: self.size
-            font_size: 24
+            font_size: 20
             halign: 'left'
             valign: 'top'
-            text: "Stuff is really broken"
+            text: root.issue.title
+            text_size: self.size
+            max_lines: 2
             size_hint_y: 0.6
         Label:
             text_size: self.size
             halign: 'left'
             valign: 'bottom'
             font_size: 16
-            text: "@clalancette"
+            text: "@" + root.issue.author
             size_hint_y: 0.2
             bold: True
         Label:
@@ -43,12 +39,13 @@
             valign: 'bottom'
             text_size: self.size
             font_size: 16
-            text: "org/repo#123"
+            text: root.issue.repo.owner + '/' + root.issue.repo.name
             size_hint_y: 0.2
     Button:
         size_hint: (None, None)
-        size: 100, 100
+        size: 100, root.height
         text: "dismiss"
+        on_release: root.do_dismiss_callback()
     
 <LoginScreen>:
     BoxLayout:
@@ -96,19 +93,10 @@
 
 <IssueScreen>:
     StackLayout:
+        id: stack
         orientation: "tb-lr"
         padding: 3
         spacing: 3
-
-        Issue:
-
-        Issue:
-
-        Issue:
-
-        FatChance:
-
-        Issue:
 
 
 <RepoPickerScreen>:

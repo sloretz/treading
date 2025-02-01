@@ -7,8 +7,8 @@ from gql import gql
 
 @dataclass
 class Repository:
-    owner: str
-    name: str
+    owner: str = ""
+    name: str = ""
 
 
 class RepoLoader(abc.ABC):
