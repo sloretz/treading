@@ -5,6 +5,7 @@ import time
 
 from gql import gql
 
+
 @dataclass
 class Repository:
     owner: str = ""
@@ -24,8 +25,7 @@ class RepoLoader(abc.ABC):
         self._thread.start()
 
     @abc.abstractmethod
-    def load_repos(self) -> tuple[Repository]:
-        ...
+    def load_repos(self) -> tuple[Repository]: ...
 
     def _load_repos(self):
         self._repos = self.load_repos()
@@ -63,26 +63,24 @@ class CurrentUserRepoLoader(RepoLoader):
                 }
                 """
             )
-            result = self._client.execute(query, variable_values={'after': after})
+            result = self._client.execute(query, variable_values={"after": after})
             return result
 
         q = None
-        while q is None or q['viewer']['repositories']['pageInfo']['hasNextPage']:
+        while q is None or q["viewer"]["repositories"]["pageInfo"]["hasNextPage"]:
             if q is None:
                 q = _query("")
             else:
-                q = _query(q['viewer']['repositories']['pageInfo']['endCursor'])
-            for r in q['viewer']['repositories']['nodes']:
-                owner, name = r['nameWithOwner'].split('/')
+                q = _query(q["viewer"]["repositories"]["pageInfo"]["endCursor"])
+            for r in q["viewer"]["repositories"]["nodes"]:
+                owner, name = r["nameWithOwner"].split("/")
                 repos.append(Repository(name=name, owner=owner))
         return tuple(repos)
 
 
-
-
 class OrgRepoLoader(RepoLoader):
 
-    def __init__(self, organization, *args,**kwargs):
+    def __init__(self, organization, *args, **kwargs):
         self.organization = organization
         super().__init__(*args, **kwargs)
 
@@ -107,24 +105,27 @@ class OrgRepoLoader(RepoLoader):
                 }
                 """
             )
-            result = self._client.execute(query, variable_values={'after': after, 'organization': self.organization})
+            result = self._client.execute(
+                query,
+                variable_values={"after": after, "organization": self.organization},
+            )
             return result
 
         q = None
-        while q is None or q['organization']['repositories']['pageInfo']['hasNextPage']:
+        while q is None or q["organization"]["repositories"]["pageInfo"]["hasNextPage"]:
             if q is None:
                 q = _query("")
             else:
-                q = _query(q['organization']['repositories']['pageInfo']['endCursor'])
-            for r in q['organization']['repositories']['nodes']:
-                owner, name = r['nameWithOwner'].split('/')
+                q = _query(q["organization"]["repositories"]["pageInfo"]["endCursor"])
+            for r in q["organization"]["repositories"]["nodes"]:
+                owner, name = r["nameWithOwner"].split("/")
                 repos.append(Repository(name=name, owner=owner))
         return tuple(repos)
 
 
 class FileRepoLoader(RepoLoader):
 
-    def __init__(self, filepath, *args,**kwargs):
+    def __init__(self, filepath, *args, **kwargs):
         self.filepath = filepath
         super().__init__(*args, **kwargs)
 
@@ -135,16 +136,18 @@ class FileRepoLoader(RepoLoader):
             while line := f.readline():
                 print(line)
                 # Strip comments
-                if '#' in line:
-                    line = line[:line.find("#")]
+                if "#" in line:
+                    line = line[: line.find("#")]
                 # strip whitespace
                 line = line.strip()
                 if not line:
                     # ingore blank lines
                     continue
-                if line.count('/') != 1:
-                    raise RuntimeError('Incorrect format: {line}. Use one owner/name per line.')
-                owner, name = line.split('/')
+                if line.count("/") != 1:
+                    raise RuntimeError(
+                        "Incorrect format: {line}. Use one owner/name per line."
+                    )
+                owner, name = line.split("/")
                 print(line)
                 repos.append(Repository(name=name, owner=owner))
         return tuple(repos)

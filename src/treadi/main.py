@@ -1,11 +1,13 @@
 import kivy
-kivy.require('2.3.1')
+
+kivy.require("2.3.1")
 
 from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.config import Config
-Config.set('graphics', 'resizable', False)
+
+Config.set("graphics", "resizable", False)
 from kivy.core.window import Window
 from kivy.properties import ColorProperty
 from kivy.properties import NumericProperty
@@ -42,7 +44,7 @@ ISSUES = None
 def make_gql_client(access_token):
     transport = RequestsHTTPTransport(
         url="https://api.github.com/graphql",
-        headers = {
+        headers={
             "Authorization": f"bearer {access_token}",
         },
         verify=True,
@@ -54,9 +56,7 @@ def make_gql_client(access_token):
 
 class IssueWidget(ButtonBehavior, BoxLayout):
 
-    color = ColorProperty(
-        defaultvalue=[0.6, 0.6, 0.6, 1]
-    )
+    color = ColorProperty(defaultvalue=[0.6, 0.6, 0.6, 1])
 
     issue = ObjectProperty(
         Issue(),
@@ -84,7 +84,7 @@ class IssueWidget(ButtonBehavior, BoxLayout):
 
 
 class IssueScreen(Screen):
-    
+
     def on_pre_enter(self):
         issue_loader = App.get_running_app().issue_loader
         for i in range(5):
@@ -101,7 +101,7 @@ class IssueScreen(Screen):
         # Add a new issue below the others (probably displaying below the bottom of the screen)
         self.add_next_issue(App.get_running_app().issue_loader)
         # Animate the dismissed widget shrinking
-        anim = Animation(height = 0, opacity = 0, duration = 0.3, transition = 'out_cubic')
+        anim = Animation(height=0, opacity=0, duration=0.3, transition="out_cubic")
         anim.bind(on_complete=lambda *args: self.ids.stack.remove_widget(issue_widget))
         anim.start(issue_widget)
 
@@ -109,20 +109,33 @@ class IssueScreen(Screen):
 class RepoPickerScreen(Screen):
 
     def use_all_user_repos(self):
-        self.manager.switch_to(RepoLoadingScreen(CurrentUserRepoLoader(App.get_running_app().gql_client)))
+        self.manager.switch_to(
+            RepoLoadingScreen(CurrentUserRepoLoader(App.get_running_app().gql_client))
+        )
 
     def use_all_gazebo_repos(self):
-        self.manager.switch_to(RepoLoadingScreen(OrgRepoLoader("gazebosim", App.get_running_app().gql_client)))
+        self.manager.switch_to(
+            RepoLoadingScreen(
+                OrgRepoLoader("gazebosim", App.get_running_app().gql_client)
+            )
+        )
 
     def use_all_rmf_repos(self):
-        self.manager.switch_to(RepoLoadingScreen(OrgRepoLoader("open-rmf", App.get_running_app().gql_client)))
+        self.manager.switch_to(
+            RepoLoadingScreen(
+                OrgRepoLoader("open-rmf", App.get_running_app().gql_client)
+            )
+        )
 
     def use_all_ros_repos(self):
         self.manager.switch_to(
             RepoLoadingScreen(
                 FileRepoLoader(
                     pathlib.Path(__file__).parent.resolve() / "ros_pmc_repos.txt",
-                    App.get_running_app().gql_client)))
+                    App.get_running_app().gql_client,
+                )
+            )
+        )
 
 
 class RepoLoadingScreen(Screen):
@@ -147,9 +160,8 @@ class IssueLoadingScreen(Screen):
 
     def __init__(self, repos, **kwargs):
         App.get_running_app().issue_loader = IssueLoader(
-            App.get_running_app().gql_client,
-            repos,
-            self.update_progress)
+            App.get_running_app().gql_client, repos, self.update_progress
+        )
         super().__init__(**kwargs)
 
     def update_progress(self, progress):
@@ -159,14 +171,14 @@ class IssueLoadingScreen(Screen):
 
     def switch_to_issues(self):
         # Must only be called on main thread
-        self.manager.transition.direction = 'left'
-        self.manager.current = 'issues'
+        self.manager.transition.direction = "left"
+        self.manager.current = "issues"
 
 
 class LoginScreen(Screen):
 
     device_flow = ObjectProperty(
-            auth.DeviceFlow(
+        auth.DeviceFlow(
             device_code="",
             user_code="",
             verification_uri="",
@@ -183,9 +195,7 @@ class LoginScreen(Screen):
     def start_device_flow(self):
         self.device_flow = auth.start_device_flow()
         print("Device flow started: ", self.device_flow)
-        Clock.schedule_once(
-            lambda dt: self.check_auth(),
-            self.device_flow.interval)
+        Clock.schedule_once(lambda dt: self.check_auth(), self.device_flow.interval)
 
     def open_browser(self, url):
         webbrowser.open(url)
@@ -194,16 +204,22 @@ class LoginScreen(Screen):
         response = auth.ask_for_token(self.device_flow)
         match response.status:
             case auth.Status.AUTHORIZATION_PENDING:
-                Clock.schedule_once(lambda dt: self.check_auth(), self.device_flow.interval)
+                Clock.schedule_once(
+                    lambda dt: self.check_auth(), self.device_flow.interval
+                )
             case auth.Status.EXPIRED_TOKEN:
                 self.start_device_flow()
             case auth.Status.ACCESS_DENIED:
-                raise RuntimeError('TODO nice error message when user denies TreadI App')
+                raise RuntimeError(
+                    "TODO nice error message when user denies TreadI App"
+                )
             case auth.Status.ACCESS_GRANTED:
                 # Listeners on the token_response property are notified here
                 self.token_response = response
             case _:
-                raise RuntimeError('TODO nice error message when other error encountered')
+                raise RuntimeError(
+                    "TODO nice error message when other error encountered"
+                )
 
 
 class TreadIApp(App):
@@ -220,9 +236,9 @@ class TreadIApp(App):
 
     def on_login_result(self, _, token_response):
         if self.make_client_from_response(token_response):
-            self.manager.transition.direction = 'left'
-            self.manager.current = 'repos'
-        raise RuntimeError('TODO more graceful response to login failure')
+            self.manager.transition.direction = "left"
+            self.manager.current = "repos"
+        raise RuntimeError("TODO more graceful response to login failure")
 
     def build(self):
         Window.size = (500, 518)
@@ -237,8 +253,8 @@ class TreadIApp(App):
             login_screen.bind(token_response=self.on_login_result)
             self.sm.add_widget(login_screen)
 
-        self.sm.add_widget(RepoPickerScreen(name='repos'))
-        self.sm.add_widget(IssueScreen(name='issues'))
+        self.sm.add_widget(RepoPickerScreen(name="repos"))
+        self.sm.add_widget(IssueScreen(name="issues"))
 
         return self.sm
 
@@ -247,5 +263,5 @@ def main():
     TreadIApp().run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -22,9 +22,25 @@ authors = [
 maintainers = [
   {name = "Shane Loretz", email = "shane.loretz@gmail.com"},
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Natural Language :: English",
+  "Topic :: Software Development :: Bug Tracking",
+  "Topic :: Utilities",
+]
 
 [project.gui-scripts]
 treadi = "treadi.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/treadi"]
+
+[tool.black]
+line-length = 88
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]

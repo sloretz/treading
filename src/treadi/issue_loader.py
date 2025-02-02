@@ -28,13 +28,13 @@ def is_same_issue(l, r):
 def _make_issue(repo, gh_data):
     return Issue(
         repo=repo,
-        author=gh_data['author']['login'],
-        created_at=datetime.fromisoformat(gh_data['createdAt']),
-        updated_at=datetime.fromisoformat(gh_data['updatedAt']),
-        number=int(gh_data['number']),
-        title=gh_data['title'],
-        url=gh_data['url'],
-        is_read=bool(gh_data['isReadByViewer'])
+        author=gh_data["author"]["login"],
+        created_at=datetime.fromisoformat(gh_data["createdAt"]),
+        updated_at=datetime.fromisoformat(gh_data["updatedAt"]),
+        number=int(gh_data["number"]),
+        title=gh_data["title"],
+        url=gh_data["url"],
+        is_read=bool(gh_data["isReadByViewer"]),
     )
 
 
@@ -50,7 +50,7 @@ class IssueLoader:
         # The list of issues that have been dismissed, and not yet promoted to upcomming
         self._dismissed_issues = []
         self._lock = threading.Lock()
-        self._logger = logging.getLogger('IssueLoader')
+        self._logger = logging.getLogger("IssueLoader")
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._submit(self._load_initial_issues, repos, progress_callback)
 
@@ -109,17 +109,17 @@ class IssueLoader:
             )
             result = self._client.execute(query)
             for i, r in enumerate(repos[:REPOS_PER_QUERY]):
-                rkey = f'r{i}'
+                rkey = f"r{i}"
                 data = result[rkey]
                 with self._lock:
-                    for issue in data['issues']['nodes']:
+                    for issue in data["issues"]["nodes"]:
                         self._upcomming_issues.append(_make_issue(r, issue))
-                    for pr in data['pullRequests']['nodes']:
+                    for pr in data["pullRequests"]["nodes"]:
                         self._upcomming_issues.append(_make_issue(r, pr))
             repos = repos[REPOS_PER_QUERY:]
-            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at) 
+            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
             progress_callback((num_repos_at_start - len(repos)) / num_repos_at_start)
-        
+
         # TODO submit work to regularly check for new issues
         pass
 
@@ -130,7 +130,9 @@ class IssueLoader:
                 if is_same_issue(issue, u):
                     if issue.updated_at >= u.updated_at:
                         self._upcomming_issues[i] = issue
-                        self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
+                        self._upcomming_issues.sort(
+                            reverse=True, key=lambda i: i.updated_at
+                        )
                     return
             for i, d in enumerate(self._displayed_issues):
                 if is_same_issue(issue, d):
@@ -144,7 +146,7 @@ class IssueLoader:
                     return
             # Must be new, add it to upcomming list
             self._upcomming_issues.append(issue)
-            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)  
+            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
 
     def next_issue(self) -> Issue:
         with self._lock:
@@ -160,4 +162,3 @@ class IssueLoader:
                 if is_same_issue(issue, d):
                     del self._displayed_issues[i]
             self._dismissed_issues.append(issue)
-
