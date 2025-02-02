@@ -30,6 +30,7 @@ from gql.transport.requests import RequestsHTTPTransport
 from . import auth
 from .issue_loader import IssueLoader, Issue
 from .repo_loader import CurrentUserRepoLoader
+from .repo_loader import OrgRepoLoader
 
 
 USERNAME = None
@@ -107,16 +108,20 @@ class IssueScreen(Screen):
 class RepoPickerScreen(Screen):
 
     def use_all_user_repos(self):
-        self.manager.switch_to(RepoLoadingScreen(CurrentUserRepoLoader))
+        self.manager.switch_to(RepoLoadingScreen(CurrentUserRepoLoader(App.get_running_app().gql_client)))
+
+    def use_all_gazebo_repos(self):
+        self.manager.switch_to(RepoLoadingScreen(OrgRepoLoader("gazebosim", App.get_running_app().gql_client)))
+
+    def use_all_rmf_repos(self):
+        self.manager.switch_to(RepoLoadingScreen(OrgRepoLoader("open-rmf", App.get_running_app().gql_client)))
 
 
 class RepoLoadingScreen(Screen):
 
-    def __init__(self, repo_loader_class, **kwargs):
-        self._loader = repo_loader_class(
-            App.get_running_app().gql_client,
-            self.switch_to_issue_loading
-        )
+    def __init__(self, loader, **kwargs):
+        self._loader = loader
+        self._loader.begin_loading(self.switch_to_issue_loading)
         super().__init__(**kwargs)
 
     def switch_to_issue_loading(self, repos):
