@@ -31,6 +31,7 @@ from . import auth
 from .issue_loader import IssueLoader, Issue
 from .repo_loader import CurrentUserRepoLoader
 from .repo_loader import OrgRepoLoader
+from .repo_loader import FileRepoLoader
 
 
 USERNAME = None
@@ -115,6 +116,13 @@ class RepoPickerScreen(Screen):
 
     def use_all_rmf_repos(self):
         self.manager.switch_to(RepoLoadingScreen(OrgRepoLoader("open-rmf", App.get_running_app().gql_client)))
+
+    def use_all_ros_repos(self):
+        self.manager.switch_to(
+            RepoLoadingScreen(
+                FileRepoLoader(
+                    pathlib.Path(__file__).parent.resolve() / "ros_pmc_repos.txt",
+                    App.get_running_app().gql_client)))
 
 
 class RepoLoadingScreen(Screen):

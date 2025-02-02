@@ -120,3 +120,31 @@ class OrgRepoLoader(RepoLoader):
                 owner, name = r['nameWithOwner'].split('/')
                 repos.append(Repository(name=name, owner=owner))
         return tuple(repos)
+
+
+class FileRepoLoader(RepoLoader):
+
+    def __init__(self, filepath, *args,**kwargs):
+        self.filepath = filepath
+        super().__init__(*args, **kwargs)
+
+    def load_repos(self):
+        repos = []
+
+        with self.filepath.open() as f:
+            while line := f.readline():
+                print(line)
+                # Strip comments
+                if '#' in line:
+                    line = line[:line.find("#")]
+                # strip whitespace
+                line = line.strip()
+                if not line:
+                    # ingore blank lines
+                    continue
+                if line.count('/') != 1:
+                    raise RuntimeError('Incorrect format: {line}. Use one owner/name per line.')
+                owner, name = line.split('/')
+                print(line)
+                repos.append(Repository(name=name, owner=owner))
+        return tuple(repos)
