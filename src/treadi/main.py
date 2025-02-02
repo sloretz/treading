@@ -101,7 +101,7 @@ class IssueScreen(Screen):
         # Add a new issue below the others (probably displaying below the bottom of the screen)
         self.add_next_issue(App.get_running_app().issue_loader)
         # Animate the dismissed widget shrinking
-        anim = Animation(height=0, opacity=0, duration=0.3, transition="out_cubic")
+        anim = Animation(height=0, opacity=0, duration=0.125, transition="out_cubic")
         anim.bind(on_complete=lambda *args: self.ids.stack.remove_widget(issue_widget))
         anim.start(issue_widget)
 

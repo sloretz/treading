@@ -39,7 +39,7 @@
             valign: 'bottom'
             text_size: self.size
             font_size: 16
-            text: root.issue.repo.owner + '/' + root.issue.repo.name
+            text: root.issue.repo.owner + '/' + root.issue.repo.name + '#' + str(root.issue.number)
             size_hint_y: 0.2
     Button:
         size_hint: (None, None)
