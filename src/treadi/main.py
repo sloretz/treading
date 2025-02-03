@@ -8,6 +8,7 @@ from kivy.clock import Clock
 from kivy.config import Config
 
 Config.set("graphics", "resizable", False)
+Config.set("input", "mouse", "mouse,disable_multitouch")
 from kivy.core.window import Window
 from kivy.properties import ColorProperty
 from kivy.properties import NumericProperty
@@ -69,11 +70,13 @@ class IssueWidget(ButtonBehavior, BoxLayout):
         super().__init__(**kwargs)
 
     def on_press(self):
-        self.color = [0.6, 0.6, 0.8, 1]
+        if self.last_touch.button == "left":
+            self.color = [0.6, 0.6, 0.8, 1]
 
     def on_release(self):
         # Oh yeah, the whole point is to open the issue
-        webbrowser.open(self.issue.url)
+        if self.last_touch.button == "left":
+            webbrowser.open(self.issue.url)
 
     def do_dismiss_callback(self):
         # Only dismiss once
