@@ -70,6 +70,51 @@ fragment prFields on PullRequest {
 }
 """
 
+INITIAL_ISSUE_QUERY = """
+issues(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
+    nodes {
+        ...issueFields
+    }
+    pageInfo {
+        endCursor
+        hasNextPage
+    }
+}
+"""
+SUBSEQUENT_ISSUE_QUERY = """
+issues(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
+    nodes {
+        ...issueFields
+    }
+    pageInfo {
+        endCursor
+        hasNextPage
+    }
+}
+"""
+INITIAL_PR_QUERY = """
+pullRequests(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
+        nodes {
+            ...prFields
+        }
+        pageInfo {
+            endCursor
+            hasNextPage
+        }
+    }
+"""
+SUBSEQUENT_PR_QUERY = """
+pullRequests(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
+        nodes {
+            ...prFields
+        }
+        pageInfo {
+            endCursor
+            hasNextPage
+        }
+    }
+"""
+
 
 class IssueLoader:
 
@@ -112,8 +157,11 @@ class IssueLoader:
             issue_page_info[r] = None
             pr_page_info[r] = None
 
-        next_repo_queries = []
+        # Outer loop runs until it finishes exploring all issues and PRs
+        # on all repos
+        next_queries = []
         while issue_page_info or pr_page_info:
+            # This loop looks for repos that still need to be explored
             for r in repos:
                 issue_query = None
                 pr_query = None
@@ -121,64 +169,18 @@ class IssueLoader:
                     ipi = issue_page_info[r]
                     if ipi is None:
                         # Initial query has no page info
-                        issue_query = """
-                        issues(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-                            nodes {
-                                ...issueFields
-                            }
-                            pageInfo {
-                                endCursor
-                                hasNextPage
-                            }
-                        }
-                        """
+                        issue_query = INITIAL_ISSUE_QUERY
                     elif ipi["hasNextPage"]:
                         # Continuing query starts from previous page
-                        issue_query = (
-                            """
-                        issues(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-                            nodes {
-                                ...issueFields
-                            }
-                            pageInfo {
-                                endCursor
-                                hasNextPage
-                            }
-                        }
-                        """
-                            % ipi["endCursor"]
-                        )
+                        issue_query = SUBSEQUENT_ISSUE_QUERY % ipi["endCursor"]
                 if r in pr_page_info:
                     prpi = pr_page_info[r]
                     if prpi is None:
                         # Initial query has no page info
-                        pr_query = """
-                        pullRequests(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-                                nodes {
-                                    ...prFields
-                                }
-                                pageInfo {
-                                    endCursor
-                                    hasNextPage
-                                }
-                            }
-                        """
+                        pr_query = INITIAL_PR_QUERY
                     elif prpi["hasNextPage"]:
                         # Continuqing query starts from previous page
-                        pr_query = (
-                            """
-                        pullRequests(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-                                nodes {
-                                    ...prFields
-                                }
-                                pageInfo {
-                                    endCursor
-                                    hasNextPage
-                                }
-                            }
-                        """
-                            % prpi["endCursor"]
-                        )
+                        pr_query = SUBSEQUENT_PR_QUERY % prpi["endCursor"]
 
                 if issue_query or pr_query:
                     repo_query = (
@@ -190,68 +192,62 @@ class IssueLoader:
                     if pr_query:
                         repo_query += pr_query
                     repo_query += "}"
-                    next_repo_queries.append(repo_query)
+                    next_queries.append(repo_query)
 
-                if len(next_repo_queries) == REPOS_PER_QUERY or r == repos[-1]:
-                    query_str = f"""
-                        query {{
-                            {'\n'.join(next_repo_queries)}
-                        }}
-                        """
-                    # It's an error to include unused fragments
-                    if issue_page_info:
-                        query_str += FRAGMENT_ISSUE
-                    if pr_page_info:
-                        query_str += FRAGMENT_PR
-                    query = gql(query_str)
-                    next_repo_queries = []
-                    result = self._client.execute(query)
-                    for rr in repos:
-                        key = f"r{id(rr)}"
-                        if key in result:
-                            repo_result = result[key]
-                            if "issues" in repo_result:
-                                for issue in repo_result["issues"]["nodes"]:
-                                    self._upcomming_issues.append(
-                                        _make_issue(rr, issue)
-                                    )
-                                if repo_result["issues"]["pageInfo"]["hasNextPage"]:
-                                    issue_page_info[rr] = repo_result["issues"][
-                                        "pageInfo"
-                                    ]
-                                else:
-                                    del issue_page_info[rr]
-                            if "pullRequests" in repo_result:
-                                for pr in repo_result["pullRequests"]["nodes"]:
-                                    self._upcomming_issues.append(
-                                        _make_issue(rr, issue)
-                                    )
-                                if repo_result["pullRequests"]["pageInfo"][
-                                    "hasNextPage"
-                                ]:
-                                    pr_page_info[rr] = repo_result["pullRequests"][
-                                        "pageInfo"
-                                    ]
-                                else:
-                                    del pr_page_info[rr]
-                    if progress_callback:
-                        issue_max = num_repos_at_start
-                        pr_max = num_repos_at_start
-                        progress_callback(
-                            (
-                                issue_max
-                                - len(issue_page_info)
-                                + pr_max
-                                - len(pr_page_info)
-                            )
-                            / (issue_max + pr_max + 1)
-                        )
-            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
+                if len(next_queries) == REPOS_PER_QUERY or r == repos[-1]:
+                    # Found enough repos, ditch the for loop
+                    break
+
+            # Execute the next query
+            query_str = f"""
+                query {{
+                    {'\n'.join(next_queries)}
+                }}
+                """
+            next_queries = []
+            # It's an error to include unused fragments,
+            # so  include only used ones
+            if issue_page_info:
+                query_str += FRAGMENT_ISSUE
+            if pr_page_info:
+                query_str += FRAGMENT_PR
+            query = gql(query_str)
+            result = self._client.execute(query)
+
+            # Figure out what repos we included in the query
+            # And for each one we did, add the issues and PRs to the upcomming list
+            for r in repos:
+                key = f"r{id(r)}"
+                if key not in result:
+                    # Query didn't include this repo
+                    continue
+                repo_result = result[key]
+                if "issues" in repo_result:
+                    for issue in repo_result["issues"]["nodes"]:
+                        self._upcomming_issues.append(_make_issue(r, issue))
+                    if repo_result["issues"]["pageInfo"]["hasNextPage"]:
+                        issue_page_info[r] = repo_result["issues"]["pageInfo"]
+                    else:
+                        del issue_page_info[r]
+                if "pullRequests" in repo_result:
+                    for pr in repo_result["pullRequests"]["nodes"]:
+                        self._upcomming_issues.append(_make_issue(r, issue))
+                    if repo_result["pullRequests"]["pageInfo"]["hasNextPage"]:
+                        pr_page_info[r] = repo_result["pullRequests"]["pageInfo"]
+                    else:
+                        del pr_page_info[r]
             if progress_callback:
-                self._logger.info(
-                    f"Loaded {len(self._upcomming_issues)} issues and PRs"
+                i_max = pr_max = num_repos_at_start
+                # Add 1 in denominator so we only return 1 after
+                # upcomming issues are sorted.
+                progress_callback(
+                    (i_max - len(issue_page_info) + pr_max - len(pr_page_info))
+                    / (i_max + pr_max + 1)
                 )
-                progress_callback(1)
+        self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
+        if progress_callback:
+            self._logger.info(f"Loaded {len(self._upcomming_issues)} issues and PRs")
+            progress_callback(1)
         # TODO submit work to regularly check for new issues
         pass
 
