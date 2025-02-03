@@ -6,7 +6,7 @@ import time
 from gql import gql
 
 
-@dataclass
+@dataclass(frozen=True)
 class Repository:
     owner: str = ""
     name: str = ""
