@@ -206,7 +206,7 @@ class IssueLoader:
                 """
             next_queries = []
             # It's an error to include unused fragments,
-            # so  include only used ones
+            # so only include a fragment if it's used.
             if issue_page_info:
                 query_str += FRAGMENT_ISSUE
             if pr_page_info:
@@ -214,8 +214,8 @@ class IssueLoader:
             query = gql(query_str)
             result = self._client.execute(query)
 
-            # Figure out what repos we included in the query
-            # And for each one we did, add the issues and PRs to the upcomming list
+            # Figure out what repos the query included,
+            # and add the issues and PRs to the upcomming list
             for r in repos:
                 key = f"r{id(r)}"
                 if key not in result:
@@ -238,8 +238,10 @@ class IssueLoader:
                         del pr_page_info[r]
             if progress_callback:
                 i_max = pr_max = num_repos_at_start
-                # Add 1 in denominator so we only return 1 after
+                # Add 1 in denominator so 1 is only returned
                 # upcomming issues are sorted.
+                # This keeps the UI from advancing too quickly and
+                # displaying not-the-latest stuff.
                 progress_callback(
                     (i_max - len(issue_page_info) + pr_max - len(pr_page_info))
                     / (i_max + pr_max + 1)
