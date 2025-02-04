@@ -35,6 +35,7 @@ from .issue_loader import IssueLoader, Issue
 from .repo_loader import CurrentUserRepoLoader
 from .repo_loader import OrgRepoLoader
 from .repo_loader import FileRepoLoader
+from .repo_loader import SequentialRepoLoaders
 
 
 USERNAME = None
@@ -119,7 +120,17 @@ class RepoPickerScreen(Screen):
     def use_all_gazebo_repos(self):
         self.manager.switch_to(
             RepoLoadingScreen(
-                OrgRepoLoader("gazebosim", App.get_running_app().gql_client)
+                SequentialRepoLoaders(
+                    repo_loaders=[
+                        OrgRepoLoader("gazebosim", App.get_running_app().gql_client),
+                        OrgRepoLoader(
+                            "gazebo-tooling", App.get_running_app().gql_client
+                        ),
+                        OrgRepoLoader(
+                            "gazebo-release", App.get_running_app().gql_client
+                        ),
+                    ],
+                )
             )
         )
 
@@ -134,8 +145,7 @@ class RepoPickerScreen(Screen):
         self.manager.switch_to(
             RepoLoadingScreen(
                 FileRepoLoader(
-                    pathlib.Path(__file__).parent.resolve() / "ros_pmc_repos.txt",
-                    App.get_running_app().gql_client,
+                    pathlib.Path(__file__).parent.resolve() / "ros_pmc_repos.txt"
                 )
             )
         )
