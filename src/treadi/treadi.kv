@@ -11,15 +11,15 @@
 
     orientation: "horizontal"
     size_hint_y: None
-    size_y: 100
+    size_y: '100dp'
     BoxLayout:
         size_hint_x: 0.9
         orientation: "vertical"
-        padding: 3
-        spacing: 3
+        padding: '3dp'
+        spacing: '3dp'
         Label:
             text_size: self.size
-            font_size: 20
+            font_size: '20sp'
             halign: 'left'
             valign: 'top'
             text: root.issue.title
@@ -30,7 +30,7 @@
             text_size: self.size
             halign: 'left'
             valign: 'bottom'
-            font_size: 16
+            font_size: '16sp'
             text: "@" + root.issue.author
             size_hint_y: 0.2
             bold: True
@@ -38,12 +38,12 @@
             halign: 'left'
             valign: 'bottom'
             text_size: self.size
-            font_size: 16
+            font_size: '16sp'
             text: root.issue.repo.owner + '/' + root.issue.repo.name + '#' + str(root.issue.number)
             size_hint_y: 0.2
     Button:
         size_hint: (None, None)
-        size: 100, root.height
+        size: '100dp', root.height
         text: "dismiss"
         on_release: root.do_dismiss_callback()
     
@@ -51,22 +51,22 @@
     BoxLayout:
         orientation: "vertical"
         Label:
-            font_size: 24
+            font_size: '24sp'
             text: "Login to Github by using this code"
         RelativeLayout:
             Button:
-                font_size: 32
+                font_size: '32sp'
                 text: root.device_flow.user_code
                 on_release: Clipboard.copy(self.text);
             Label:
                 pos_hint: {'top': 0.65, 'right': 1.4}
                 text: "Click to copy"
         Label:
-            font_size: 24
+            font_size: '24sp'
             text: "at this web page"
         RelativeLayout:
             Button:
-                font_size: 24
+                font_size: '24sp'
                 text: root.device_flow.verification_uri
                 on_release: root.open_browser(self.text)
             Label:
@@ -77,15 +77,15 @@
     BoxLayout:
         orientation: "vertical"
         Label:
-            font_size: 24
+            font_size: '24sp'
             text: "Loading repositories"
 
 <IssueLoadingScreen>:
     BoxLayout:
         orientation: "vertical"
-        padding: 10
+        padding: '10dp'
         Label:
-            font_size: 24
+            font_size: '24sp'
             text: "Loading issues and pull requests"
         ProgressBar:
             value: root.progress
@@ -95,15 +95,15 @@
     StackLayout:
         id: stack
         orientation: "tb-lr"
-        padding: 3
-        spacing: 3
+        padding: '3dp'
+        spacing: '3dp'
 
 
 <RepoPickerScreen>:
     BoxLayout:
         orientation: 'vertical'
         Label:
-            font_size: 24
+            font_size: '24sp'
             text: "Pick repos to list issues from"
         Button:
             text: "Public repos I own"
