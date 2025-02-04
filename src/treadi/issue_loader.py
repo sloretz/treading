@@ -231,7 +231,7 @@ class IssueLoader:
                         del issue_page_info[r]
                 if "pullRequests" in repo_result:
                     for pr in repo_result["pullRequests"]["nodes"]:
-                        self._upcomming_issues.append(_make_issue(r, issue))
+                        self._upcomming_issues.append(_make_issue(r, pr))
                     if repo_result["pullRequests"]["pageInfo"]["hasNextPage"]:
                         pr_page_info[r] = repo_result["pullRequests"]["pageInfo"]
                     else:
