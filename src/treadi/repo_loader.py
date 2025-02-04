@@ -14,8 +14,7 @@ class Repository:
 
 class RepoLoader(abc.ABC):
 
-    def __init__(self, gql_client):
-        self._client = gql_client
+    def __init__(self):
         self._done_callback = None
         self._repos = None
         self._thread = threading.Thread(target=self._load_repos, daemon=True)
@@ -40,7 +39,26 @@ class RepoLoader(abc.ABC):
         self._thread = None
 
 
+class SequentialRepoLoaders(RepoLoader):
+    """Invokes multiple repo loaders in a chain."""
+
+    def __init__(self, repo_loaders, *args, **kwargs):
+        self._loaders = repo_loaders
+        super().__init__(*args, **kwargs)
+
+    def load_repos(self):
+        repos = []
+        for loader in self._loaders:
+            repos.extend(loader.load_repos())
+        repos = tuple(set(repos))
+        return repos
+
+
 class CurrentUserRepoLoader(RepoLoader):
+
+    def __init__(self, gql_client, *args, **kwargs):
+        self._client = gql_client
+        super().__init__(*args, **kwargs)
 
     def load_repos(self):
         repos = []
@@ -80,7 +98,8 @@ class CurrentUserRepoLoader(RepoLoader):
 
 class OrgRepoLoader(RepoLoader):
 
-    def __init__(self, organization, *args, **kwargs):
+    def __init__(self, organization, gql_client, *args, **kwargs):
+        self._client = gql_client
         self.organization = organization
         super().__init__(*args, **kwargs)
 
