@@ -243,7 +243,9 @@ class TreadIApp(App):
             self.sm.transition.direction = "left"
             self.sm.current = "repos"
         else:
-            raise RuntimeError(f"TODO more graceful response to login failure {token_response}")
+            raise RuntimeError(
+                f"TODO more graceful response to login failure {token_response}"
+            )
 
     def build(self):
         Window.size = (500, 518)
