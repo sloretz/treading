@@ -10,6 +10,8 @@ from kivy.config import Config
 Config.set("graphics", "resizable", False)
 Config.set("input", "mouse", "mouse,disable_multitouch")
 from kivy.core.window import Window
+
+Window.size = (500, 518)
 from kivy.properties import ColorProperty
 from kivy.properties import NumericProperty
 from kivy.properties import ObjectProperty
@@ -258,8 +260,7 @@ class TreadIApp(App):
             )
 
     def build(self):
-        Window.size = (500, 518)
-        Window.always_on_top = True
+        # Window.always_on_top = True
 
         self.sm = ScreenManager()
 
