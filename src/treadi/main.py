@@ -221,7 +221,7 @@ class LoginScreen(Screen):
                 self.token_response = response
             case _:
                 raise RuntimeError(
-                    "TODO nice error message when other error encountered"
+                    f"TODO nice error message when other error encountered{response}"
                 )
 
 
@@ -239,9 +239,13 @@ class TreadIApp(App):
 
     def on_login_result(self, _, token_response):
         if self.make_client_from_response(token_response):
-            self.manager.transition.direction = "left"
-            self.manager.current = "repos"
-        raise RuntimeError("TODO more graceful response to login failure")
+            auth.store_refresh_token(token_response.refresh_token)
+            self.sm.transition.direction = "left"
+            self.sm.current = "repos"
+        else:
+            raise RuntimeError(
+                f"TODO more graceful response to login failure {token_response}"
+            )
 
     def build(self):
         Window.size = (500, 518)

@@ -59,8 +59,12 @@ class Status(Enum):
     EXPIRED_TOKEN = 12
     # User denied TreadI access
     ACCESS_DENIED = 13
+    # Refresh token is invalid
+    INCORRECT_CLIENT_CREDENTIALS = 51
     # Something else that TreadI doesn't handle specifically
     OTHER_ERROR = 100
+    # Not a github error, this means there's no cached refresh token
+    NO_TOKEN = 1001
 
 
 @dataclass
@@ -107,8 +111,13 @@ def refresh_access_token(refresh_token, *, client_id=CLIENT_ID):
     r = requests.post("https://github.com/login/oauth/access_token", data=data)
     if r.status_code != 200:
         return TokenResponse(status=Status.OTHER_ERROR)
-
     response = urllib.parse.parse_qs(r.text)
+    if "error" in response.keys():
+        match response["error"][0]:
+            case "incorrect_client_credentials":
+                return TokenResponse(status=Status.INCORRECT_CLIENT_CREDENTIALS)
+            case _:
+                return TokenResponse(status=Status.OTHER_ERROR)
     return TokenResponse(
         status=Status.ACCESS_GRANTED,
         access_token=response["access_token"][0],
@@ -119,7 +128,7 @@ def refresh_access_token(refresh_token, *, client_id=CLIENT_ID):
 def cycle_cached_token():
     rt = get_refresh_token()
     if rt is None:
-        return False
+        return TokenResponse(status=Status.NO_TOKEN)
     response = refresh_access_token(rt)
     if response.status == Status.ACCESS_GRANTED:
         store_refresh_token(response.refresh_token)
