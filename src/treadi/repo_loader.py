@@ -5,6 +5,10 @@ import time
 
 from gql import gql
 
+import requests
+
+from yaml import safe_load as load_yaml
+
 
 @dataclass(frozen=True)
 class Repository:
@@ -169,4 +173,38 @@ class FileRepoLoader(RepoLoader):
                 owner, name = line.split("/")
                 print(line)
                 repos.append(Repository(name=name, owner=owner))
+        return tuple(repos)
+
+
+class VcsRepoLoader(RepoLoader):
+
+    def __init__(self, url, *args, **kwargs):
+        self.url = url
+        super().__init__(*args, **kwargs)
+
+    def load_repos(self):
+        repos = []
+
+        r = requests.get(self.url)
+        if r.status_code != 200:
+            raise RuntimeError(f"TODO Handle VCS Repose download failure {r}")
+
+        repos_file = load_yaml(r.text)
+        if "repositories" not in repos_file:
+            raise RuntimeError(f"TODO handle invalid repos file {repos_file}")
+
+        for repo_data in repos_file["repositories"].values():
+            if "url" not in repo_data:
+                raise RuntimeError(f"TODO handle invalid repos file {repos_file}")
+            url = repo_data["url"]
+            if not url.startswith("https://github.com/"):
+                continue
+            url = url[len("https://github.com/") :]
+            if url.endswith(".git"):
+                url = url[: -len(".git")]
+            if url.count("/") != 1:
+                raise RuntimeError("Unable to parse url: {repo_data['url']}")
+            owner, name = url.split("/")
+            repos.append(Repository(name=name, owner=owner))
+
         return tuple(repos)
