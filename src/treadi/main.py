@@ -38,6 +38,7 @@ from .repo_loader import CurrentUserRepoLoader
 from .repo_loader import OrgRepoLoader
 from .repo_loader import FileRepoLoader
 from .repo_loader import SequentialRepoLoaders
+from .repo_loader import VcsRepoLoader
 
 
 USERNAME = None
@@ -142,6 +143,15 @@ class RepoPickerScreen(Screen):
         self.manager.switch_to(
             RepoLoadingScreen(
                 OrgRepoLoader("open-rmf", App.get_running_app().gql_client)
+            )
+        )
+
+    def use_all_infra_repos(self):
+        self.manager.switch_to(
+            RepoLoadingScreen(
+                VcsRepoLoader(
+                    "https://raw.githubusercontent.com/ros-infrastructure/ci/refs/heads/main/ros-infrastructure.repos"
+                )
             )
         )
 
