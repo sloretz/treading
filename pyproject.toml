@@ -35,6 +35,10 @@ classifiers = [
 [project.gui-scripts]
 treadi = "treadi.main:main"
 
+[project.urls]
+"Homepage" = "https://github.com/sloretz/TreadI"
+"Source" = "https://github.com/sloretz/TreadI"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/treadi"]
 
