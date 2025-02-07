@@ -199,9 +199,10 @@ class IssueLoader:
                     break
 
             # Execute the next query
+            joined_queries = "\n".join(next_queries)
             query_str = f"""
                 query {{
-                    {'\n'.join(next_queries)}
+                    {joined_queries}
                 }}
                 """
             next_queries = []
