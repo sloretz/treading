@@ -33,7 +33,9 @@ from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
 from . import auth
-from .issue_loader import IssueLoader, Issue
+from .data import Issue
+from .issue_cache import IssueCache
+from .issue_loader import IssueLoader
 from .repo_loader import CurrentUserRepoLoader
 from .repo_loader import OrgRepoLoader
 from .repo_loader import FileRepoLoader
@@ -93,21 +95,38 @@ class IssueWidget(ButtonBehavior, BoxLayout):
 class IssueScreen(Screen):
 
     def on_pre_enter(self):
-        issue_loader = App.get_running_app().issue_loader
-        for i in range(5):
-            self.add_next_issue(issue_loader)
+        issue_cache = App.get_running_app().issue_cache
+        issues = issue_cache.most_recent_issues(n=5)
+        for i in issues:
+            self._add_issue(i)
 
-    def add_next_issue(self, issue_loader):
-        issue = issue_loader.next_issue()
-        if issue is None:
-            return
-        # TODO give issue widget the issue
+    def _add_issue(self, issue):
         self.ids.stack.add_widget(IssueWidget(issue, self.dismiss))
 
     def dismiss(self, issue_widget):
-        # Add a new issue below the others (probably displaying below the bottom of the screen)
-        self.add_next_issue(App.get_running_app().issue_loader)
-        # Animate the dismissed widget shrinking
+        issue = issue_widget.issue
+        issue_cache = App.get_running_app().issue_cache
+
+        issue_cache.dismiss(issue)
+
+        child_issues = []
+        for child in self.children:
+            if hasattr(child, "issue"):
+                child_issues.append(child.issue)
+
+        # aim for 1 additional issue, because one is being dismissed
+        consider_issues = issue_cache.most_recent_issues(n=1 + len(child_issues))
+        for itc in consider_issues:
+            displaying_issue = False
+            for chi in child_issues:
+                if is_same_issue(itc, chi):
+                    displaying_issue = True
+                    break
+            if not displaying_issue:
+                self._add_issue(itc)
+                break
+
+        # Animate the dismissed widget shrinking, so new issue reveals from below
         anim = Animation(
             size_hint_y=0, opacity=0, duration=0.125, transition="out_cubic"
         )
@@ -187,7 +206,10 @@ class IssueLoadingScreen(Screen):
 
     def __init__(self, repos, **kwargs):
         App.get_running_app().issue_loader = IssueLoader(
-            App.get_running_app().gql_client, repos, self.update_progress
+            App.get_running_app().gql_client,
+            repos,
+            App.get_running_app().issue_cache,
+            self.update_progress,
         )
         super().__init__(**kwargs)
 
@@ -253,6 +275,7 @@ class TreadIApp(App):
 
     gql_client = None
     issue_loader = None
+    issue_cache = IssueCache()
     sm = None
 
     def make_client_from_response(self, token_response):

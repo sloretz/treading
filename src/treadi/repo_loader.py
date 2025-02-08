@@ -1,5 +1,4 @@
 import abc
-from dataclasses import dataclass
 import threading
 import time
 
@@ -9,11 +8,7 @@ import requests
 
 from yaml import safe_load as load_yaml
 
-
-@dataclass(frozen=True)
-class Repository:
-    owner: str = ""
-    name: str = ""
+from .data import Repository
 
 
 class RepoLoader(abc.ABC):
