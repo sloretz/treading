@@ -34,6 +34,7 @@ from gql.transport.requests import RequestsHTTPTransport
 
 from . import auth
 from .data import Issue
+from .data import is_same_issue
 from .issue_cache import IssueCache
 from .issue_loader import IssueLoader
 from .repo_loader import CurrentUserRepoLoader
@@ -110,7 +111,7 @@ class IssueScreen(Screen):
         issue_cache.dismiss(issue)
 
         child_issues = []
-        for child in self.children:
+        for child in self.ids.stack.children:
             if hasattr(child, "issue"):
                 child_issues.append(child.issue)
 
