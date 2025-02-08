@@ -1,4 +1,4 @@
-name: Python Lint
+name: Pytest CI
 
 on: [push, pull_request]
 
