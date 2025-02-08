@@ -48,4 +48,11 @@ line-length = 88
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = [
+    "tests",
 ]
