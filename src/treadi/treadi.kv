@@ -10,7 +10,7 @@
             size: self.size
 
     orientation: "horizontal"
-    size_hint_y: 0.2
+    size_hint_y: 0.18
     BoxLayout:
         size_hint_x: 0.9
         orientation: "vertical"
@@ -96,6 +96,16 @@
         orientation: "tb-lr"
         padding: '3dp'
         spacing: '3dp'
+        BoxLayout:
+            orientation: "horizontal"
+            size_hint_y: 0.1
+            Button:
+                size_hint_x: 0.1
+                text: "back"
+                on_release:
+                    root.manager.transition.direction = "right"
+                    root.manager.current = "repos"
+                
 
 
 <RepoPickerScreen>:
