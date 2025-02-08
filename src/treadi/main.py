@@ -11,7 +11,7 @@ Config.set("graphics", "resizable", False)
 Config.set("input", "mouse", "mouse,disable_multitouch")
 from kivy.core.window import Window
 
-Window.size = (500, 518)
+Window.size = (500, 571)
 from kivy.properties import ColorProperty
 from kivy.properties import NumericProperty
 from kivy.properties import ObjectProperty
@@ -93,6 +93,7 @@ class IssueWidget(ButtonBehavior, BoxLayout):
 class IssueScreen(Screen):
 
     def on_pre_enter(self):
+        print(self.manager.screens)
         issue_loader = App.get_running_app().issue_loader
         for i in range(5):
             self.add_next_issue(issue_loader)
@@ -113,7 +114,7 @@ class IssueScreen(Screen):
         )
         anim.bind(on_complete=lambda *args: self.ids.stack.remove_widget(issue_widget))
         anim.start(issue_widget)
-
+        
 
 class RepoPickerScreen(Screen):
 
