@@ -1,28 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+
 from datetime import datetime
 import threading
 import time
 import logging
 from gql import gql
-from .repo_loader import Repository
-
-
-@dataclass
-class Issue:
-    repo: Repository = Repository
-    author: str = ""
-    created_at: datetime = None
-    updated_at: datetime = None
-    number: int = 0
-    title: str = ""
-    url: str = ""
-    # Has the current viewer looked at this issue or PR?
-    is_read: bool = False
-
-
-def is_same_issue(l, r):
-    return l.repo == r.repo and l.number == r.number
+from .data import Issue
+from .data import Repository
 
 
 def _make_issue(repo, gh_data):
@@ -118,15 +102,10 @@ pullRequests(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DES
 
 class IssueLoader:
 
-    def __init__(self, gql_client, repos, progress_callback):
+    def __init__(self, gql_client, repos, cache, progress_callback):
         self._client = gql_client
         self._repos = repos
-        # The list of issues that will be displayed next
-        self._upcomming_issues = []
-        # The list of issues currently being displayed
-        self._displayed_issues = []
-        # The list of issues that have been dismissed, and not yet promoted to upcomming
-        self._dismissed_issues = []
+        self._cache = cache
         self._lock = threading.Lock()
         self._logger = logging.getLogger("IssueLoader")
         self._executor = ThreadPoolExecutor(max_workers=1)
@@ -160,6 +139,8 @@ class IssueLoader:
         # Outer loop runs until it finishes exploring all issues and PRs
         # on all repos
         next_queries = []
+        issue_count = 0
+        pr_count = 0
         while issue_page_info or pr_page_info:
             # This loop looks for repos that still need to be explored
             for r in repos:
@@ -225,71 +206,26 @@ class IssueLoader:
                 repo_result = result[key]
                 if "issues" in repo_result:
                     for issue in repo_result["issues"]["nodes"]:
-                        self._upcomming_issues.append(_make_issue(r, issue))
+                        self._cache.insert(_make_issue(r, issue))
+                        issue_count += 1
                     if repo_result["issues"]["pageInfo"]["hasNextPage"]:
                         issue_page_info[r] = repo_result["issues"]["pageInfo"]
                     else:
                         del issue_page_info[r]
                 if "pullRequests" in repo_result:
                     for pr in repo_result["pullRequests"]["nodes"]:
-                        self._upcomming_issues.append(_make_issue(r, pr))
+                        self._cache.insert(_make_issue(r, pr))
+                        pr_count += 1
                     if repo_result["pullRequests"]["pageInfo"]["hasNextPage"]:
                         pr_page_info[r] = repo_result["pullRequests"]["pageInfo"]
                     else:
                         del pr_page_info[r]
             if progress_callback:
                 i_max = pr_max = num_repos_at_start
-                # Add 1 in denominator so 1 is only returned
-                # upcomming issues are sorted.
-                # This keeps the UI from advancing too quickly and
-                # displaying not-the-latest stuff.
                 progress_callback(
                     (i_max - len(issue_page_info) + pr_max - len(pr_page_info))
-                    / (i_max + pr_max + 1)
+                    / (i_max + pr_max)
                 )
-        self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
         if progress_callback:
-            self._logger.info(f"Loaded {len(self._upcomming_issues)} issues and PRs")
-            progress_callback(1)
+            self._logger.info(f"Loaded {issue_count} issues and {pr_count} PRs")
         # TODO submit work to regularly check for new issues
-        pass
-
-    def _update_issue(self, issue):
-        # Update the appropriate list with new data for an issue
-        with self._lock:
-            for i, u in enumerate(self._upcomming_issues):
-                if is_same_issue(issue, u):
-                    if issue.updated_at >= u.updated_at:
-                        self._upcomming_issues[i] = issue
-                        self._upcomming_issues.sort(
-                            reverse=True, key=lambda i: i.updated_at
-                        )
-                    return
-            for i, d in enumerate(self._displayed_issues):
-                if is_same_issue(issue, d):
-                    if issue.updated_at >= d.updated_at:
-                        self._displayed_issues[i] = issue
-                    return
-            for i, d in enumerate(self._dismissed_issues):
-                if is_same_issue(issue, d):
-                    if issue.updated_at >= d.updated_at:
-                        self._dismissed_issues[i] = issue
-                    return
-            # Must be new, add it to upcomming list
-            self._upcomming_issues.append(issue)
-            self._upcomming_issues.sort(reverse=True, key=lambda i: i.updated_at)
-
-    def next_issue(self) -> Issue:
-        with self._lock:
-            if len(self._upcomming_issues) == 0:
-                return None
-            issue = self._upcomming_issues.pop(0)
-            self._displayed_issues.append(issue)
-            return issue
-
-    def dismiss_issue(self, issue):
-        with self._lock:
-            for i, d in enumerate(self._displayed_issues):
-                if is_same_issue(issue, d):
-                    del self._displayed_issues[i]
-            self._dismissed_issues.append(issue)
