@@ -7,11 +7,12 @@ name = "TreadI"
 version = "0.3.2"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "gql[requests]>=3.5.0",
     "keyring>=25.6.0",
     "kivy>=2.3.1",
+    "python-dateutil>=2.8.0",
     "pyyaml>=6.0.2",
     "requests>=2.32.3",
 ]
