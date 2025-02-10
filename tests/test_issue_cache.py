@@ -1,6 +1,7 @@
 import copy
-from datetime import datetime
 import random
+
+from dateutil.parser import isoparse
 
 from treadi.data import Issue
 from treadi.data import Repository
@@ -26,8 +27,8 @@ def rand_issue(*, updated_at, repo=None, is_read=False):
     return Issue(
         repo=repo,
         author=random_string(),
-        created_at=datetime.fromisoformat("2006-07-04T15:00:00Z"),
-        updated_at=datetime.fromisoformat(updated_at),
+        created_at=isoparse("2006-07-04T15:00:00Z"),
+        updated_at=isoparse(updated_at),
         number=random.randint(1, 9999),
         title=random_string(),
         url=random_string(),
@@ -78,7 +79,7 @@ def test_cache_update_dismissed():
     cache.dismiss(issue)
     assert [] == cache.most_recent_issues(1)
     issue = copy.deepcopy(issue)
-    issue.updated_at = datetime.fromisoformat("2006-07-04T16:00:00Z")
+    issue.updated_at = isoparse("2006-07-04T16:00:00Z")
     cache.insert(issue)
     assert [issue] == cache.most_recent_issues(1)
 
@@ -90,7 +91,7 @@ def test_cache_update_dismissed_is_read():
     cache.dismiss(issue)
     assert [] == cache.most_recent_issues(1)
     issue = copy.deepcopy(issue)
-    issue.updated_at = datetime.fromisoformat("2006-07-04T16:00:00Z")
+    issue.updated_at = isoparse("2006-07-04T16:00:00Z")
     issue.is_read = True
     cache.insert(issue)
     assert [] == cache.most_recent_issues(1)

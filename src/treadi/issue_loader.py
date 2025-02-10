@@ -1,10 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from datetime import datetime
 import threading
 import time
 import logging
 from gql import gql
+from dateutil.parser import isoparse
+
 from .data import Issue
 from .data import Repository
 
@@ -18,8 +19,8 @@ def _make_issue(repo, gh_data):
     return Issue(
         repo=repo,
         author=author,
-        created_at=datetime.fromisoformat(gh_data["createdAt"]),
-        updated_at=datetime.fromisoformat(gh_data["updatedAt"]),
+        created_at=isoparse(gh_data["createdAt"]),
+        updated_at=isoparse(gh_data["updatedAt"]),
         number=int(gh_data["number"]),
         title=gh_data["title"],
         url=gh_data["url"],
