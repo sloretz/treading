@@ -70,9 +70,25 @@ class IssueCache:
         with self.__lock:
             return self._most_recent_issues(n)
 
+    def newest_update_time(self):
+        with self.__lock:
+            self._sort()
+            u = self.__upcomming[:1]
+            d = self.__dismissed[:1]
+        if not u and not d:
+            return None
+        if not u:
+            return d[0].updated_at
+        if not d:
+            return u[0].updated_at
+        if d[0].updated_at > u[0].updated_at:
+            return d[0].updated_at
+        return u[0].updated_at
+
     def _most_recent_issues(self, n):
         self._sort()
         return self.__upcomming[:n]
 
     def _sort(self):
         self.__upcomming.sort(reverse=True, key=lambda i: i.updated_at)
+        self.__dismissed.sort(reverse=True, key=lambda i: i.updated_at)
