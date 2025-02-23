@@ -1,16 +1,19 @@
-from concurrent.futures import ThreadPoolExecutor
-
 import threading
 import time
 import logging
 from gql import gql
+from datetime import datetime
 from dateutil.parser import isoparse
 
 from .data import Issue
 from .data import Repository
 
 
-def _make_issue(repo, gh_data):
+def _make_issue(gh_data):
+    repo = Repository(
+        owner=gh_data["repository"]["owner"]["login"],
+        name=gh_data["repository"]["name"],
+    )
     if gh_data["author"] is None:
         # https://github.com/ghost
         author = "ghost"
@@ -39,6 +42,12 @@ fragment issueFields on Issue {
     updatedAt
     url
     isReadByViewer
+    repository {
+        name
+        owner {
+            login
+        }
+    }
 }
 """
 FRAGMENT_PR = """
@@ -52,90 +61,93 @@ fragment prFields on PullRequest {
     updatedAt
     url
     isReadByViewer
+    repository {
+        name
+        owner {
+            login
+        }
+    }
 }
 """
 
-INITIAL_ISSUE_QUERY = """
-issues(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-    nodes {
-        ...issueFields
-    }
-    pageInfo {
-        endCursor
-        hasNextPage
-    }
-}
-"""
-SUBSEQUENT_ISSUE_QUERY = """
-issues(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-    nodes {
-        ...issueFields
-    }
-    pageInfo {
-        endCursor
-        hasNextPage
-    }
-}
-"""
-INITIAL_PR_QUERY = """
-pullRequests(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-        nodes {
-            ...prFields
-        }
-        pageInfo {
-            endCursor
-            hasNextPage
-        }
-    }
-"""
-SUBSEQUENT_PR_QUERY = """
-pullRequests(first: 100, after: "%s" orderBy: {field: UPDATED_AT, direction: DESC}, states: [OPEN]) {
-        nodes {
-            ...prFields
-        }
-        pageInfo {
-            endCursor
-            hasNextPage
-        }
-    }
-"""
+
+class IssueQuery:
+
+    def __init__(self, *, first=100, after=None, states=("OPEN",)):
+        self.first = first
+        self.after = after
+        self.states = states
+
+    def __str__(self):
+        parts = [f"issues(first: {self.first}"]
+        if self.after:
+            parts.append(f', after: "{self.after}"')
+        if self.states:
+            parts.append(", states: [")
+            parts.append(",".join(self.states))
+            parts.append("]")
+        parts.append(
+            ") { nodes { ...issueFields } pageInfo { endCursor hasNextPage } }"
+        )
+        return "".join(parts)
+
+
+class PRQuery:
+
+    def __init__(self, *, first=100, after=None, states=("OPEN",)):
+        self.first = first
+        self.after = after
+        self.states = states
+
+    def __str__(self):
+        parts = [f"pullRequests(first: {self.first}"]
+        if self.after:
+            parts.append(f', after: "{self.after}"')
+        if self.states:
+            parts.append(", states: [")
+            parts.append(",".join(self.states))
+            parts.append("]")
+        parts.append(") { nodes { ...prFields } pageInfo { endCursor hasNextPage } }")
+        return "".join(parts)
 
 
 class IssueLoader:
 
     def __init__(self, gql_client, repos, cache, progress_callback):
         self._client = gql_client
-        self._repos = repos
+        self._repos = tuple(repos)
         self._cache = cache
         self._lock = threading.Lock()
         self._logger = logging.getLogger("IssueLoader")
-        self._executor = ThreadPoolExecutor(max_workers=1)
-        self._submit(self._load_all_issues, repos, progress_callback)
+        self._thread = threading.Thread(daemon=True, target=self._run)
+        self._progress_callback = progress_callback
+        self._thread.start()
 
-    def _submit(self, *args):
-        f = self._executor.submit(*args)
-        f.add_done_callback(self._log_exception)
-
-    def _log_exception(self, future):
+    def _run(self):
         try:
-            future.result()
+            self._load_all_issues(
+                repos_per_query=10, progress_callback=self._progress_callback
+            )
         except:
-            self._logger.exception("Exception in IssueLoader background thread")
+            self._logger.exception("Exception in IssueLoader thread")
+        while True:
+            time.sleep(15)
+            try:
+                # Uses search API to get updated issues and PRs
+                self._update_all_issues()
+            except:
+                self._logger.exception("Exception in IssueLoader thread")
 
-    def _load_all_issues(self, repos, progress_callback=None):
-        num_repos_at_start = len(repos)
-        # Make a copy to not modify caller
-        repos = list(repos)
-
-        REPOS_PER_QUERY = 10
+    def _load_all_issues(self, repos_per_query, progress_callback=None):
+        num_repos_at_start = len(self._repos)
 
         # These dicts indicate if repos have more issues or PRs to query
         issue_page_info = {}
         pr_page_info = {}
-        for r in repos:
+        for r in self._repos:
             # Use "None" to mean we haven't queried anything yet
-            issue_page_info[r] = None
-            pr_page_info[r] = None
+            issue_page_info[r] = {"endCursor": None}
+            pr_page_info[r] = {"endCursor": None}
 
         # Outer loop runs until it finishes exploring all issues and PRs
         # on all repos
@@ -144,25 +156,15 @@ class IssueLoader:
         pr_count = 0
         while issue_page_info or pr_page_info:
             # This loop looks for repos that still need to be explored
-            for r in repos:
+            for r in self._repos:
                 issue_query = None
                 pr_query = None
                 if r in issue_page_info:
                     ipi = issue_page_info[r]
-                    if ipi is None:
-                        # Initial query has no page info
-                        issue_query = INITIAL_ISSUE_QUERY
-                    elif ipi["hasNextPage"]:
-                        # Continuing query starts from previous page
-                        issue_query = SUBSEQUENT_ISSUE_QUERY % ipi["endCursor"]
+                    issue_query = IssueQuery(after=ipi["endCursor"])
                 if r in pr_page_info:
                     prpi = pr_page_info[r]
-                    if prpi is None:
-                        # Initial query has no page info
-                        pr_query = INITIAL_PR_QUERY
-                    elif prpi["hasNextPage"]:
-                        # Continuqing query starts from previous page
-                        pr_query = SUBSEQUENT_PR_QUERY % prpi["endCursor"]
+                    pr_query = PRQuery(after=prpi["endCursor"])
 
                 if issue_query or pr_query:
                     repo_query = (
@@ -170,13 +172,13 @@ class IssueLoader:
                     )
                     repo_query += "{"
                     if issue_query:
-                        repo_query += issue_query
+                        repo_query += str(issue_query)
                     if pr_query:
-                        repo_query += pr_query
+                        repo_query += str(pr_query)
                     repo_query += "}"
                     next_queries.append(repo_query)
 
-                if len(next_queries) == REPOS_PER_QUERY or r == repos[-1]:
+                if len(next_queries) == repos_per_query:
                     # Found enough repos, ditch the for loop
                     break
 
@@ -198,8 +200,8 @@ class IssueLoader:
             result = self._client.execute(query)
 
             # Figure out what repos the query included,
-            # and add the issues and PRs to the upcomming list
-            for r in repos:
+            # and add the issues and PRs to the cache
+            for r in self._repos:
                 key = f"r{id(r)}"
                 if key not in result:
                     # Query didn't include this repo
@@ -207,7 +209,7 @@ class IssueLoader:
                 repo_result = result[key]
                 if "issues" in repo_result:
                     for issue in repo_result["issues"]["nodes"]:
-                        self._cache.insert(_make_issue(r, issue))
+                        self._cache.insert(_make_issue(issue))
                         issue_count += 1
                     if repo_result["issues"]["pageInfo"]["hasNextPage"]:
                         issue_page_info[r] = repo_result["issues"]["pageInfo"]
@@ -215,7 +217,7 @@ class IssueLoader:
                         del issue_page_info[r]
                 if "pullRequests" in repo_result:
                     for pr in repo_result["pullRequests"]["nodes"]:
-                        self._cache.insert(_make_issue(r, pr))
+                        self._cache.insert(_make_issue(pr))
                         pr_count += 1
                     if repo_result["pullRequests"]["pageInfo"]["hasNextPage"]:
                         pr_page_info[r] = repo_result["pullRequests"]["pageInfo"]
@@ -227,6 +229,30 @@ class IssueLoader:
                     (i_max - len(issue_page_info) + pr_max - len(pr_page_info))
                     / (i_max + pr_max)
                 )
-        if progress_callback:
-            self._logger.info(f"Loaded {issue_count} issues and {pr_count} PRs")
-        # TODO submit work to regularly check for new issues
+        self._logger.info(f"Loaded {issue_count} issues and {pr_count} PRs")
+
+    def _update_all_issues(self):
+
+        updated_time = self._cache.newest_update_time().isoformat()
+
+        def make_query(extra):
+            gh_search = f"{extra} is:open updated:>{updated_time} "
+            gh_search += " ".join([f"repo:{r.owner}/{r.name}" for r in self._repos])
+            query_parts = ["{"]
+            query_parts.append(f'search(first: 1, query: "{gh_search}", type: ISSUE) ')
+            query_parts.append("{ nodes {...issueFields ...prFields} }")
+            query_parts.append("}")
+            query_parts.append(FRAGMENT_ISSUE)
+            query_parts.append(FRAGMENT_PR)
+            return " ".join(query_parts)
+
+        # TODO use pagination for unlikely case of more than 100 updated issues
+        # Must query for issues and PRs separately
+        # https://github.com/orgs/community/discussions/149046
+        issues = self._client.execute(gql(make_query("is:issue")))
+        for i in issues["search"]["nodes"]:
+            self._cache.insert(_make_issue(i))
+
+        prs = self._client.execute(gql(make_query("is:pr")))
+        for pr in prs["search"]["nodes"]:
+            self._cache.insert(_make_issue(pr))
